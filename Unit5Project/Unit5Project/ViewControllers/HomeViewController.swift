@@ -11,21 +11,32 @@ import CoreLocation
 import MapKit
 
 class HomeViewController: UIViewController {
+    
+    //MARK: Variables
     private let locationManager = CLLocationManager()
     var searchString: String = ""
-    var venueData = [Venue]() {
+   var venueData = [Venue]() {
         didSet {
-            collectionView.reloadData()
+            imageArray = []
+            loadImageData(venue: self.venueData)
+            
+            for i in self.venueData {
+                let annotation = MKPointAnnotation()
+                annotation.title = i.name
+                if let data = i.location {
+                    annotation.coordinate = CLLocationCoordinate2D(latitude: data.lat, longitude: data.lng)
+                    annotation.subtitle = i.id
+                    self.mapView.addAnnotation(annotation)
+                }
+            }
         }
     }
     
     var imageArray:[UIImage] = [] {
         didSet {
-            
             guard self.imageArray.count == venueData.count else {return}
             navigationItem.rightBarButtonItem?.isEnabled = true
             collectionView.reloadData()
-            
         }
     }
     var searchCoordinates:String? = nil {
@@ -37,11 +48,9 @@ class HomeViewController: UIViewController {
     var searchStringQuery:String = "" {
         didSet  {
             guard self.searchStringQuery != ""  else {return}
-            
             loadVenueData(query: self.searchStringQuery)
         }
     }
-    
     let searchRadius: CLLocationDistance = 1000
     
     var coordinate:CLLocationCoordinate2D? = CLLocationCoordinate2D() {
@@ -52,14 +61,14 @@ class HomeViewController: UIViewController {
             loadVenueData(query: searchStringQuery)
         }
     }
-    
+    //MARK: @IB Outlets
     @IBOutlet weak var mapView: MKMapView!
     @IBOutlet weak var venueSearch: UISearchBar!
     @IBOutlet weak var citySearch: UISearchBar!
     @IBOutlet weak var collectionView: UICollectionView!
     @IBAction func listButton(_ sender: Any) {
     }
-    
+    //MARK: Life Cycle Functions
     override func viewDidLoad() {
         super.viewDidLoad()
         locationManager.delegate = self
@@ -67,6 +76,13 @@ class HomeViewController: UIViewController {
         mapView.showsUserLocation = true
         mapView.userTrackingMode = .follow
         requestLocationAndAuthorizeIfNeeded()
+        venueSearch.delegate = self
+        citySearch.delegate = self
+        collectionView.dataSource = self
+        collectionView.delegate = self 
+        venueSearch.placeholder = "Search Venues"
+        citySearch.placeholder = "Search City"
+        
     }
     //MARK: Private Functions
     private func requestLocationAndAuthorizeIfNeeded() {
@@ -140,8 +156,12 @@ class HomeViewController: UIViewController {
         }
     }
     
+    
+    
+    
+    
 }
-
+//MARK: Extensions
 extension HomeViewController: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         if let location = locations.last{
@@ -163,7 +183,82 @@ extension HomeViewController: CLLocationManagerDelegate {
         }
     }
 }
+//MARK: Search Bar Extensions
 extension HomeViewController: UISearchBarDelegate {
+    func searchBarShouldBeginEditing(_ searchBar: UISearchBar) -> Bool {
+           switch searchBar.tag {
+           case 0:
+               venueSearch.showsCancelButton = true
+               venueSearch.setImage(UIImage(systemName: "magnifyingglass.circle.fill"), for: .search, state: .normal)
+           case 1:
+               citySearch.showsCancelButton = true
+               citySearch.setImage(UIImage(systemName: "magnifyingglass.circle.fill"), for: .search, state: .normal)
+           default:
+               break
+           }
+           
+           return true
+       }
+    func searchBarTextDidEndEditing(_ searchBar: UISearchBar) {
+        switch searchBar.tag {
+        case 0:
+            venueSearch.setImage(UIImage(systemName: "magnifyingglass.circle"), for: .search, state: .normal)
+        case 1:
+            citySearch.setImage(UIImage(systemName: "magnifyingglass.circle"), for: .search, state: .normal)
+        default:
+            break
+        }
+    }
+    func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
+        switch searchBar.tag {
+        case 0:
+            venueSearch.showsCancelButton = false
+            searchStringQuery = ""
+            searchBar.placeholder = ""
+            venueSearch.resignFirstResponder()
+            
+        case 1:
+            citySearch.showsCancelButton = false
+            citySearch.resignFirstResponder()
+            
+        default:
+            break
+            
+        }
+    }
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        let annotations = self.mapView.annotations
+        
+        switch searchBar.tag {
+        case 0:
+            self.mapView.removeAnnotations(annotations)
+            guard let search = venueSearch.text else {return}
+            guard search != "" else {return}
+            searchStringQuery = search.capitalized
+            venueSearch.placeholder = venueSearch.text?.capitalized
+            
+            searchBar.resignFirstResponder()
+            
+        case 1:
+            if venueSearch.alpha != 1.0 {
+                UIView.animate(withDuration: 2.5, delay: 0.0, options: [.transitionCrossDissolve], animations: {
+                    self.venueSearch.alpha = 1.0
+                }, completion: nil)
+            }
+            venueSearch.isUserInteractionEnabled = true
+
+            guard let search = citySearch.text else {return}
+            navigationItem.title = search.capitalized
+            searchCoordinates = search
+            citySearch.placeholder = search.capitalized
+            self.mapView.removeAnnotations(annotations)
+            resignFirstResponder()
+        default:
+            break
+        }
+        
+    }
+    
     
 }
 extension HomeViewController: UICollectionViewDelegate , UICollectionViewDataSource {
@@ -172,7 +267,9 @@ extension HomeViewController: UICollectionViewDelegate , UICollectionViewDataSou
     }
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        return UICollectionViewCell()
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "VenueCell", for: indexPath) as! VenueCollectionViewCell
+        cell.imageVenue.image = imageArray[indexPath.row]
+        return cell
     }
     
     
